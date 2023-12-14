@@ -53,7 +53,15 @@ pub fn norm_vec3(v: Vec3) -> Vec3 {
 }
 
 pub fn cross_vec3(v0: Vec3, v1: Vec3) -> Vec3 {
-    vec3((v0.y * v1.z) - (v0.z * v1.y), (v0.z * v1.x) - (v0.x * v1.z), (v0.x * v1.y) - (v0.y * v1.x))
+    vec3(
+        (v0.y * v1.z) - (v0.z * v1.y),
+        (v0.z * v1.x) - (v0.x * v1.z),
+        (v0.x * v1.y) - (v0.y * v1.x),
+    )
+}
+
+pub fn scale_vec3(scalar: f32, vec: Vec3) -> Vec3 {
+    vec3(vec.x * scalar, vec.y * scalar, vec.z * scalar)
 }
 
 pub const fn identity_mat4() -> Mat4 {
@@ -152,4 +160,8 @@ pub fn mul_mat4(left: Mat4, right: Mat4) -> Mat4 {
     }
 
     m
+}
+
+pub fn add_vec3(v0: Vec3, v1: Vec3) -> Vec3 {
+    vec3(v0.x + v1.x, v0.y + v1.y, v0.z + v1.z)
 }

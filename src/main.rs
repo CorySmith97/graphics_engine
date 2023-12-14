@@ -1,8 +1,14 @@
+#![allow(dead_code)]
+#![allow(unused_variables)]
+#![allow(unused_imports)]
 mod math;
 mod shader;
 use shader::*;
 mod debug;
 pub use debug::*;
+mod mesh;
+pub use mesh::*;
+
 use math as m;
 use sokol::{
     app::{self as sapp, Keycode},
@@ -24,37 +30,43 @@ struct State<'a> {
     pass_action: sg::PassAction,
     pip: sg::Pipeline,
     bind: sg::Bindings,
+    event: sapp::Event,
     rx: f32,
     ry: f32,
     pos: Vec<m::Vec3>,
     path: &'a str,
+    camera: Camera,
+    mouse_toggle: bool,
 }
 
 struct Camera {
     position: m::Vec3,
     target: m::Vec3,
     up: m::Vec3,
+    camera_front: m::Vec3,
+    yaw: f32,
+    pitch: f32,
 }
 
 static mut STATE: State = State {
     pass_action: sg::PassAction::new(),
     pip: sg::Pipeline::new(),
     bind: sg::Bindings::new(),
+    event: sapp::Event::new(),
     rx: 0.,
     ry: 0.,
     pos: Vec::new(),
-    path: "../assets/awesomeface.png",
+    path: "src/assets/awesomeface.png",
+    camera: Camera {
+        position: m::vec3(0., 0., 3.0),
+        target: m::vec3(0., 0., 0.),
+        up: m::vec3(0., 1., 0.),
+        camera_front: m::vec3(0., 0., -1.),
+        yaw: -90.,
+        pitch: 0.,
+    },
+    mouse_toggle: false,
 };
-
-pub struct Vertex {
-    pub x: f32,
-    pub y: f32,
-    pub z: f32,
-
-    pub color: u32,
-    pub u: u16,
-    pub v: u16,
-}
 
 extern "C" fn init() {
     let state = unsafe { &mut STATE };
@@ -78,58 +90,16 @@ extern "C" fn init() {
         ..Default::default()
     });
 
-    #[rustfmt::skip]
-    const VERTICES: &[Vertex] = &[
-        // pos                                color              uvs
-        Vertex { x: -1.0,  y: -1.0, z: -1.0,  color: 0xFF0000FF, u:     0, v:     0 },
-        Vertex { x:  1.0,  y: -1.0, z: -1.0,  color: 0xFF0000FF, u: 32767, v:     0 },
-        Vertex { x:  1.0,  y:  1.0, z: -1.0,  color: 0xFF0000FF, u: 32767, v: 32767 },
-        Vertex { x: -1.0,  y:  1.0, z: -1.0,  color: 0xFF0000FF, u:     0, v: 32767 },
-
-        Vertex { x: -1.0,  y: -1.0, z:  1.0,  color: 0xFF00FF00, u:     0, v:     0 },
-        Vertex { x:  1.0,  y: -1.0, z:  1.0,  color: 0xFF00FF00, u: 32767, v:     0 },
-        Vertex { x:  1.0,  y:  1.0, z:  1.0,  color: 0xFF00FF00, u: 32767, v: 32767 },
-        Vertex { x: -1.0,  y:  1.0, z:  1.0,  color: 0xFF00FF00, u:     0, v: 32767 },
-
-        Vertex { x: -1.0,  y: -1.0, z: -1.0,  color: 0xFFFF0000, u:     0, v:     0 },
-        Vertex { x: -1.0,  y:  1.0, z: -1.0,  color: 0xFFFF0000, u: 32767, v:     0 },
-        Vertex { x: -1.0,  y:  1.0, z:  1.0,  color: 0xFFFF0000, u: 32767, v: 32767 },
-        Vertex { x: -1.0,  y: -1.0, z:  1.0,  color: 0xFFFF0000, u:     0, v: 32767 },
-
-        Vertex { x:  1.0,  y: -1.0, z: -1.0,  color: 0xFFFF007F, u:     0, v:     0 },
-        Vertex { x:  1.0,  y:  1.0, z: -1.0,  color: 0xFFFF007F, u: 32767, v:     0 },
-        Vertex { x:  1.0,  y:  1.0, z:  1.0,  color: 0xFFFF007F, u: 32767, v: 32767 },
-        Vertex { x:  1.0,  y: -1.0, z:  1.0,  color: 0xFFFF007F, u:     0, v: 32767 },
-
-        Vertex { x: -1.0,  y: -1.0, z: -1.0,  color: 0xFFFF7F00, u:     0, v:     0 },
-        Vertex { x: -1.0,  y: -1.0, z:  1.0,  color: 0xFFFF7F00, u: 32767, v:     0 },
-        Vertex { x:  1.0,  y: -1.0, z:  1.0,  color: 0xFFFF7F00, u: 32767, v: 32767 },
-        Vertex { x:  1.0,  y: -1.0, z: -1.0,  color: 0xFFFF7F00, u:     0, v: 32767 },
-
-        Vertex { x: -1.0,  y:  1.0, z: -1.0,  color: 0xFF007FFF, u:     0, v:     0 },
-        Vertex { x: -1.0,  y:  1.0, z:  1.0,  color: 0xFF007FFF, u: 32767, v:     0 },
-        Vertex { x:  1.0,  y:  1.0, z:  1.0,  color: 0xFF007FFF, u: 32767, v: 32767 },
-        Vertex { x:  1.0,  y:  1.0, z: -1.0,  color: 0xFF007FFF, u:     0, v: 32767 },
-    ];
-
-    #[rustfmt::skip]
-    const INDICES: &[u16] = &[
-        0, 1, 2,  0, 2, 3,
-        6, 5, 4,  7, 6, 4,
-        8, 9, 10,  8, 10, 11,
-        14, 13, 12,  15, 14, 12,
-        16, 17, 18,  16, 18, 19,
-        22, 21, 20,  23, 22, 20,
-    ];
+    let cube = Mesh::new_cube();
 
     state.bind.vertex_buffers[0] = sg::make_buffer(&sg::BufferDesc {
-        data: sg::slice_as_range(VERTICES),
+        data: sg::slice_as_range(cube.verticies),
         _type: sg::BufferType::Vertexbuffer,
         ..Default::default()
     });
 
     state.bind.index_buffer = sg::make_buffer(&sg::BufferDesc {
-        data: sg::slice_as_range(INDICES),
+        data: sg::slice_as_range(cube.indices),
         _type: sg::BufferType::Indexbuffer,
         ..Default::default()
     });
@@ -193,14 +163,88 @@ extern "C" fn init() {
 
 extern "C" fn event(event: *const sapp::Event) {
     let event = unsafe { &*event };
+    let state = unsafe { &mut STATE };
 
-    if event._type == sapp::EventType::KeyDown {
-        if event.key_code == sapp::Keycode::A {
-            println!("!");
+    match event._type {
+        sapp::EventType::KeyDown => {
+            match event.key_code {
+                sapp::Keycode::M => println!("TEST"),
+                sapp::Keycode::W => {
+                    state.camera.position = m::add_vec3(
+                        state.camera.position,
+                        m::scale_vec3(
+                            6. * sapp::frame_duration() as f32,
+                            state.camera.camera_front,
+                        ),
+                    );
+                }
+                sapp::Keycode::Comma => {
+                    sapp::show_mouse(sapp::mouse_shown());
+                }
+
+                _ => (),
+            }
+            if event.key_code == sapp::Keycode::S {
+                state.camera.position = m::sub_vec3(
+                    state.camera.position,
+                    m::scale_vec3(
+                        6. * sapp::frame_duration() as f32,
+                        state.camera.camera_front,
+                    ),
+                );
+            }
+            if event.key_code == sapp::Keycode::A {
+                state.camera.position = m::sub_vec3(
+                    state.camera.position,
+                    m::scale_vec3(
+                        6. * sapp::frame_duration() as f32,
+                        m::norm_vec3(m::cross_vec3(state.camera.camera_front, state.camera.up)),
+                    ),
+                );
+            }
+            if event.key_code == sapp::Keycode::D {
+                state.camera.position = m::add_vec3(
+                    state.camera.position,
+                    m::scale_vec3(
+                        6. * sapp::frame_duration() as f32,
+                        m::norm_vec3(m::cross_vec3(state.camera.camera_front, state.camera.up)),
+                    ),
+                );
+            }
         }
-    }
 
-    if event._type == sapp::EventType::MouseMove {}
+        sapp::EventType::MouseMove => {
+            let sensitivity = 0.1;
+            let x_offset = event.mouse_dx * sensitivity;
+            let y_offset = event.mouse_dy * sensitivity;
+
+            state.camera.yaw += x_offset;
+            state.camera.pitch -= y_offset;
+
+            if state.camera.pitch > 89.0 {
+                state.camera.pitch = 89.0
+            };
+
+            if state.camera.pitch < -89.0 {
+                state.camera.pitch = -89.0
+            };
+            let yaw_rads = f32::to_radians(state.camera.yaw);
+            // println!("Degree: {}, Rads: {}", state.camera.yaw, yaw_rads);
+
+            let front = m::vec3(
+                f32::cos(f32::to_radians(state.camera.yaw))
+                    * f32::cos(f32::to_radians(state.camera.pitch)),
+                f32::sin(f32::to_radians(state.camera.pitch)),
+                f32::sin(f32::to_radians(state.camera.yaw))
+                    * f32::cos(f32::to_radians(state.camera.pitch)),
+            );
+
+            state.camera.camera_front = m::norm_vec3(front);
+            // println!("Camera Front {:?}", state.camera.camera_front);
+        }
+
+        _ => (),
+    }
 }
 const HEIGHT: usize = 512;
 const WIDTH: usize = 512;
@@ -231,19 +275,23 @@ fn convert_to_u32_array(img: &DynamicImage) -> [u32; WIDTH * HEIGHT] {
 extern "C" fn frame() {
     let start = Instant::now();
     let state = unsafe { &mut STATE };
+    println!("Frame Count: {:?}", sapp::frame_count());
+    println!("Cam Pos: {:?}", state.camera.position);
 
     let t = (sapp::frame_duration()) as f32;
 
     state.rx += t * 30.;
     state.ry += t * 50.;
 
-    let proj = m::persp_mat4(45.0, sapp::widthf() / sapp::heightf(), 0.01, 100.0);
+    let proj = m::persp_mat4(90.0, sapp::widthf() / sapp::heightf(), 0.01, 100.0);
 
     let view = m::lookat_mat4(
-        m::vec3(0., 2., 6.),
-        m::vec3(0., 0., 0.),
+        state.camera.position,
+        m::add_vec3(state.camera.position, state.camera.camera_front),
         m::vec3(0., 1., 0.),
     );
+
+    //println!("View: {:?}", view[2]);
 
     let view_proj = m::mul_mat4(proj, view);
     let (width, height) = (sapp::width(), sapp::height());
@@ -271,17 +319,12 @@ extern "C" fn cleanup() {
 }
 
 pub fn compute_mvp(rx: f32, ry: f32, i: i32, view_proj: m::Mat4) -> [[f32; 4]; 4] {
-    let mut state = unsafe { &mut STATE };
+    let state = unsafe { &mut STATE };
 
-    let angle = 20.0 * rx * (i as f32 - 1.0);
     let vec = m::vec3(1.0, 0.0, 0.0);
-
-    let rotation = m::rotate_mat4(rx, vec);
-    let rym = m::rotate_mat4(ry, m::vec3(0., 1.0, 0.));
     let model = m::translate_mat4(state.pos[(i - 1) as usize]);
 
-    let rm = m::mul_mat4(rotation, rym);
-    m::mul_mat4(view_proj, rm)
+    m::mul_mat4(view_proj, model)
 }
 
 fn main() {
@@ -296,6 +339,7 @@ fn main() {
         width: 800,
         height: 600,
         sample_count: 4,
+        swap_interval: 1 / 120,
         icon: sapp::IconDesc {
             sokol_default: true,
             ..Default::default()

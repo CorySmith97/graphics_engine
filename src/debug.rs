@@ -1,17 +1,10 @@
-
-
 use sokol::{
     app::{self as sapp, Keycode},
     debugtext as stdx,
     gfx::{self as sg, Image},
-    glue as sglue, log as slog,
 };
 
-use image::*;
-
-use std::path::Path;
 use std::time::{Duration, Instant};
-
 
 pub fn debug_stats(start: Instant) {
     stdx::canvas(sapp::widthf(), sapp::heightf());
@@ -20,7 +13,7 @@ pub fn debug_stats(start: Instant) {
     stdx::font(0);
 
     let duration = start.elapsed();
-    let frame_stats = format!("Elapsed us: {:.1}", duration.as_millis());
+    let frame_stats = format!("Elapsed us: {:.1}", duration.as_micros());
     stdx::puts(frame_stats.as_str());
     stdx::crlf();
     stdx::draw();
